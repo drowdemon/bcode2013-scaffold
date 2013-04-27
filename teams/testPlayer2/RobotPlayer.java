@@ -2,14 +2,13 @@ package testPlayer2;
 
 import battlecode.common.*;
 
-import java.math.*;
-
 public class RobotPlayer
 {
 	private static RobotController rc;
 	private static MapLocation rallypt;
 	private static MapLocation enemyHQ;
 	private static MapLocation myHQ;
+	@SuppressWarnings("unused")
 	private static int myChannel;
 	private static int channelBlock;
 	private static final int STARTCHANNEL=19858; //Important, but must be secret. For later, put in a second one or a bunch of them really to ensure that at least one will work. Used to give robots info of where the channel block and personal channels are
