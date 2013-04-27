@@ -2,18 +2,32 @@ package testPlayer2;
 
 import battlecode.common.*;
 
+import java.math.*;
+
 public class RobotPlayer
 {
 	private static RobotController rc;
 	private static MapLocation rallypt;
 	private static MapLocation enemyHQ;
 	private static MapLocation myHQ;
-	public static void run(RobotController myRC) throws GameActionException
+	private static int myChannel;
+	private static int channelBlock;
+	private static final int STARTCHANNEL=19858; //Important, but must be secret. For later, put in a second one or a bunch of them really to ensure that at least one will work. Used to give robots info of where the channel block and personal channels are
+	public static void run(RobotController myRC)
 	{
 		rc=myRC;
 		enemyHQ=rc.senseEnemyHQLocation();
 		myHQ=rc.senseHQLocation();
 		rallypt=new MapLocation((myHQ.x*3+enemyHQ.x)/4,(myHQ.y*3+enemyHQ.y)/4);
+		try
+		{
+			InitRadio();
+		}
+		catch (GameActionException e)
+		{
+			System.out.println("Error in InitRadio");
+			e.printStackTrace();
+		}
 		while(true)
 		{
 			if(rc.getType()==RobotType.HQ)
@@ -25,7 +39,7 @@ public class RobotPlayer
 				Robot[] enemies=rc.senseNearbyGameObjects(Robot.class,10000000,rc.getTeam().opponent());
 				if(enemies.length==0)
 				{
-					if(Clock.getRoundNum()<250)
+					if(Clock.getRoundNum()<200)
 						movetoloc(rallypt);
 					else
 						movetoloc(enemyHQ);
@@ -37,7 +51,16 @@ public class RobotPlayer
 					MapLocation myloc=rc.getLocation();
 					for(Robot r:enemies)
 					{
-						MapLocation enemyloc=rc.senseRobotInfo(r).location;
+						MapLocation enemyloc=null;
+						try
+						{
+							enemyloc = rc.senseRobotInfo(r).location;
+						}
+						catch (GameActionException e)
+						{
+							System.out.println("Error sensing enemy robots");
+							e.printStackTrace();
+						}
 						int dist=myloc.distanceSquaredTo(enemyloc);
 						if(dist<mindist)
 						{
@@ -49,6 +72,22 @@ public class RobotPlayer
 				}
 			}
 			rc.yield();
+		}
+	}
+	private static void InitRadio() throws GameActionException
+	{
+		if(rc.getType()==RobotType.HQ)
+		{
+			channelBlock=(int)((Math.random()*65535)+2919834)%65535;
+			if(channelBlock==STARTCHANNEL)
+				channelBlock+=918;
+			myChannel=(rc.getRobot().getID()*42+19857+channelBlock)%65535;
+			rc.broadcast(STARTCHANNEL, channelBlock);
+		}
+		else
+		{
+			channelBlock=rc.readBroadcast(STARTCHANNEL);
+			myChannel=(rc.getRobot().getID()*42+19857+channelBlock)%65535;
 		}
 	}
 	private static void movetoloc(MapLocation loc)
