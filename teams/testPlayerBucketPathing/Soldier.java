@@ -1,4 +1,4 @@
-package testPlayerGroupMind;
+package testPlayerBucketPathing;
 
 import battlecode.common.Clock;
 import battlecode.common.Direction;
@@ -33,6 +33,9 @@ public class Soldier extends BaseRobot
 		state=MINE;
 		spread=0;
 		miningRad=16;
+		MapLocation poss=readNextLoc(-1);
+		if(poss!=null && poss.y!=-1)
+			moveto=readNextLoc(-1); //TODO make this fix better and less improvised
 	}
 	private MapLocation readNextLoc()
 	{
@@ -156,7 +159,7 @@ public class Soldier extends BaseRobot
 			//rc.broadcast(myChannel, 0);
 			rc.broadcast((rc.senseObjectAtLocation(myHQ).getID()*28+13466+channelBlock)%65535, PATHING); //respond to base that I'm pathing
 			fullpathingBasetoBase(); //do it
-			System.out.println("GroupMind Round:" + Clock.getRoundNum());
+			System.out.println("BucketSearch Round:" + Clock.getRoundNum());
 			return false;
 		}
 		state=(result&STATEFLAGCHECK); //getting info. 
