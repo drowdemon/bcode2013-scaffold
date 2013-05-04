@@ -7,6 +7,7 @@ import battlecode.common.GameConstants;
 import battlecode.common.MapLocation;
 import battlecode.common.Robot;
 import battlecode.common.RobotController;
+import battlecode.common.RobotType;
 import battlecode.common.Team;
 
 public class Soldier extends BaseRobot
@@ -16,6 +17,7 @@ public class Soldier extends BaseRobot
 	MapLocation moveto;
 	private int state;//this will take bits 2,3, and 4 of the soldiers channel
 	private int miningRad;
+	private RobotType encampmentType;
 //	private final static int RUSH=8;
 //	private final static int MINE=4;
 //	private final static int ATTACKANDMINE=12;
@@ -53,10 +55,10 @@ public class Soldier extends BaseRobot
 			}
 			if(possCommand!=0) //If it does: COMPROMISED or no directions posted yet 
 			{
-				if(possCommand+2000000000<0 && possCommand/500000000<0) //Both tests just in case, not really required to do both. Means null terminator
+				if((possCommand&TERMINATOR)>0)
 				{
-					endreading=true; //remove null terminator
-					possCommand+=2000000000;
+					endreading=true;
+					possCommand&=(TERMINATOR-1); //removes terminator
 				}
 				else
 					numread++;
@@ -74,6 +76,26 @@ public class Soldier extends BaseRobot
 		try
 		{
 			possCommand=rc.readBroadcast((channelBlock+where*channelDelta)%65535);
+		}
+		catch (GameActionException e)
+		{
+			System.out.println("Error reading channel");
+			e.printStackTrace();
+		}
+		if(possCommand!=0) //If it does: COMPROMISED or no directions posted yet 
+		{
+			rc.setIndicatorString(1, RobotTools.inttoloc(possCommand).toString());
+			return RobotTools.inttoloc(possCommand);
+		}
+		else
+			return new MapLocation(-1,-1); //COMPROMISED, or no directions currently
+	}
+	private MapLocation readNextLocExact(int where)
+	{
+		int possCommand=0;
+		try
+		{
+			possCommand=rc.readBroadcast((where)%65535);
 		}
 		catch (GameActionException e)
 		{
@@ -154,24 +176,44 @@ public class Soldier extends BaseRobot
 		int result=0;
 		result=rc.readBroadcast(myChannel);
 		rc.setIndicatorString(0, "Result: " + result);
-		if((result&CODE_COMPPATH)>0) //I get to path
+		/*if((result&CODE_COMPPATH)>0) //I get to path
 		{
 			//rc.broadcast(myChannel, 0);
 			rc.broadcast((rc.senseObjectAtLocation(myHQ).getID()*28+13466+channelBlock)%65535, PATHING); //respond to base that I'm pathing
 			fullpathingBasetoBase(); //do it
 			System.out.println("BucketSearch Round:" + Clock.getRoundNum());
 			return false;
-		}
+		}*/
 		state=(result&STATEFLAGCHECK); //getting info. 
 		spread=(result&SPREADFLAGCHECK);
-		miningRad=(result&MININGFLAGCHECK);
-		miningRad=(miningRad/64+4)*(miningRad/64+4);
-		if((result&CHECK_NEWLOC)>0) //new location to go to
+		if(state==MINE || state==ATTACKANDMINE)
 		{
-			MapLocation test=readNextLoc(-1);
+			miningRad=(result&MININGFLAGCHECK);
+			miningRad=(miningRad/64+4)*(miningRad/64+4);
+			if((result&CHECK_NEWLOC)>0) //new location to go to
+			{
+				MapLocation test=readNextLoc(-1);
+				if(test!=null && test.y!=-1)
+					moveto=test;
+				//rc.setIndicatorString(1, "Moveto: " + moveto);
+			}
+		}
+		else if(state==CREATE_ENC)
+		{
+			System.out.println("State: " + state);
+			int x=result&CREATEENCFLAGCHECK;
+			if(x==0)
+				encampmentType=RobotType.MEDBAY;
+			else
+			{
+				encampmentType=RobotType.values()[(x>>6)+2];
+			}
+			MapLocation test=readNextLocExact(myChannel+channelDelta/3);
 			if(test!=null && test.y!=-1)
 				moveto=test;
+			//rc.setIndicatorString(0,encampmentType.toString() + " ");
 		}
+		//rc.setIndicatorString(1, state+"");
 		//if(result>STATEFLAGCHECK+SPREADFLAGCHECK+CODE_COMPPATH) //invalid
 		//	return true; //COMPROMISED! Probably.
 		return true;
@@ -226,6 +268,29 @@ public class Soldier extends BaseRobot
 			{
 				mineState(ally,nearestenemy,closeallies.length,enemies.length);
 			}
+			if(state==CREATE_ENC)
+			{
+				if(rc.isActive())
+				{
+					if(!rc.getLocation().equals(moveto))
+					{
+						moveordefuse(moveto);
+					}
+					else if(rc.getTeamPower()>rc.senseCaptureCost())
+					{	
+						try
+						{
+							System.out.println("Creating encampment: " + encampmentType + " at " + moveto);
+							rc.captureEncampment(encampmentType);
+						}
+						catch (GameActionException e)
+						{
+							e.printStackTrace();
+						}
+					}
+				}
+			}
+			//rc.setIndicatorString(1, state+"");
 			//System.out.println(numclosestenemies);
 			/*if(nearestenemy==null)
 			{
@@ -272,7 +337,7 @@ public class Soldier extends BaseRobot
 		MapLocation goal=groupGo(myloc, moveto, ally, enemy, numenemies, numallies, true, 3); //TODO CHANGE SO THAT IT DOESN'T IGNORE ENEMIES
 		//rc.setIndicatorString(0, "Repulse: " + repulse + ", Attract: " + attract);
 		//rc.setIndicatorString(1, "Spread: " + spread*3);
-		rc.setIndicatorString(1, "Moveto: " + moveto + "Goal: " + goal);
+		//rc.setIndicatorString(1, "Moveto: " + moveto + "Goal: " + goal);
 		//rc.setIndicatorString(0, "Rad: " + miningRad);
 		if(dist<=miningRad && rc.senseMine(myloc)==null) //put mines in this radius
 		{	
@@ -330,13 +395,5 @@ public class Soldier extends BaseRobot
 	/*private Direction computeSpread(MapLocation ally)
 	{
 		return rc.getLocation().directionTo(ally).opposite();
-	}*/
-	
-	public void initRadio() throws GameActionException //Initializes my radio channels
-	{
-		channelBlock=rc.readBroadcast(STARTCHANNEL);
-		myChannel=(rc.getRobot().getID()*28+13466+channelBlock)%65535;
-		channelDelta=channelBlock%57*3;
-	}
-	
+	}*/	
 }

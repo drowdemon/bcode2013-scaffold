@@ -10,12 +10,11 @@ public class RobotTools
 	public final static int BUCKETSIZE=5;
 	public static int loctoint(MapLocation loc) //converts a location to an integer VERY POORLY
 	{
-		return -loc.x*1000*2-loc.y*3;
+		return loc.x|(loc.y<<8);
 	}
 	public static MapLocation inttoloc(int n)
 	{
-		int y=((-1*n)%1000)/3;
-		return new MapLocation((-1*n/2-y)/1000,y);
+		return new MapLocation(n&255,n>>8);
 	}
 	public static ArrayList<MapLocation> parseDirections(ArrayList<Direction> dirs, MapLocation start) //merges directions like NE,NW into N,N and then merges same directions into long lines and waypoints at the end of each one
 	{
@@ -65,6 +64,7 @@ public class RobotTools
 		}
 		return ret;
 	}
+
 	public static void quickSort(MapLocation locs[], int start, int end, MapLocation comp)
 	{
 		if(start>=end)
@@ -79,11 +79,12 @@ public class RobotTools
 		MapLocation temp=locs[start];
 		locs[start]=locs[mid];
 		locs[mid]=temp;
-		int dtocomp=comp.distanceSquaredTo(locs[mid]);
+		
+		int dtocomp=comp.distanceSquaredTo(locs[start]);
 		int middle=start+1;
 		for(int i=start+1; i<end; i++)
 		{
-			if(comp.distanceSquaredTo(locs[i])<=dtocomp)
+			if(comp.distanceSquaredTo(locs[i])>dtocomp)
 			{
 				if(i==middle)
 					middle++; //no need to swap, I'd be swapping it with itself
@@ -98,8 +99,8 @@ public class RobotTools
 		}
 		
 		temp=locs[middle-1];
-		locs[middle-1]=locs[mid];
-		locs[mid]=temp;
-		return mid; //mid is partition pt
+		locs[middle-1]=locs[start];
+		locs[start]=temp;
+		return middle-1; //mid is partition pt
 	}
 }

@@ -1,17 +1,18 @@
 package testPlayerBucketPathing;
 
+import java.util.ArrayList;
+
 import battlecode.common.Clock;
 import battlecode.common.Direction;
 import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.Robot;
 import battlecode.common.RobotController;
+import battlecode.common.RobotType;
 import battlecode.common.Team;
 
 public class HQ extends BaseRobot
 {
-	private int firstguyID;
-	private boolean makingunits;
 	private int delaymakingunits;
 	private int searching;
 	private int miningRad; 
@@ -21,24 +22,20 @@ public class HQ extends BaseRobot
 	private boolean endreading;
 	private int countdownNewLoc;
 	private Direction unitCreationDir;
-	private int state;
 	private MapLocation encs[];
-	
-	private final static int FIRSTENCS=1; //ENC=encampment
-	private final static int TROOPS=2;
+	private int IDsofEncampmentCreators[];
 	public HQ(RobotController myRC)
 	{
 		super(myRC);
 		goalIndex=-1;
-		firstguyID=0;
-		makingunits=true;
 		delaymakingunits=5;
 		searching=0;
 		miningRad=0; //0->16
 		spread=0;
 		endreading=false;
 		countdownNewLoc=0;
-		state=FIRSTENCS;
+		IDsofEncampmentCreators=new int[2];
+		new ArrayList<MapLocation>();
 		//Direction dir=rc.getLocation().directionTo(enemyHQ).opposite();
 		Direction dir=rc.getLocation().directionTo(enemyHQ);
 		Team t=rc.senseMine(myHQ.add(dir));
@@ -63,12 +60,6 @@ public class HQ extends BaseRobot
 
 	public boolean run()
 	{
-		encs=rc.senseAllEncampmentSquares();
-		RobotTools.quickSort(encs, 0, encs.length, myHQ);
-		for(int i=0; i<encs.length; i++)
-		{
-			System.out.println("Sorted?: " + encs[i] + ", dist: " + myHQ.distanceSquaredTo(encs[i]));
-		}
 		if(rc.isActive())
 		{
 			Robot allies[]=rc.senseNearbyGameObjects(Robot.class, 10000, rc.getTeam());
@@ -77,14 +68,34 @@ public class HQ extends BaseRobot
 			else
 			{
 				encs=rc.senseAllEncampmentSquares();
+				//System.out.println("Sorted");
 				RobotTools.quickSort(encs, 0, encs.length, myHQ);
-				for(int i=0; i<encs.length; i++)
+				int numtimes=0;
+				for(int i=encs.length; --i>=0;)
 				{
-					System.out.println("Sorted?: " + encs[i] + ", dist: " + myHQ.distanceSquaredTo(encs[i]));
+					if(myHQ.distanceSquaredTo(encs[i])>2 || i==0)
+					{
+						try
+						{
+							rc.broadcast(((IDsofEncampmentCreators[numtimes]=allies[numtimes].getID())*28+13466+channelBlock)%65535, CREATE_ENC|(CREATE_SHIELDS*(numtimes+3))); //this is a hack. It relies on CREATE_SUPPLIER being last and CREATE_GENERATOR being before it
+							rc.broadcast((IDsofEncampmentCreators[numtimes]*28+13466+channelBlock+(channelDelta/3))%65535, RobotTools.loctoint(encs[i]));
+							System.out.println(IDsofEncampmentCreators[numtimes]);
+							System.out.println((CREATE_ENC|(CREATE_SHIELDS*(numtimes+3)))+"");
+						}
+						catch (GameActionException e)
+						{
+							e.printStackTrace();
+						}
+						if(++numtimes>=2)
+						{
+							//System.out.println("Finished with broadcasts");
+							return true;
+						}
+					}
 				}
 			}
 		}
-		return true;
+		return false;
 	}
 	public void run2()
 	{
@@ -105,12 +116,10 @@ public class HQ extends BaseRobot
 			if(rc.getTeamPower()-(int)((double)allies.length*1.5)>=20) //for some power usage
 			{
 				makeunit(); //make more guys
-				makingunits=true;
 				delaymakingunits=5;
 			}
 			else
 			{
-				makingunits=false;
 				delaymakingunits--;
 			}
 		}
@@ -126,8 +135,22 @@ public class HQ extends BaseRobot
 			msg=getAttackAndMineMessage(mymines);
 		for(Robot r:allies)
 		{
-			if(searching==0 && r.getID()==firstguyID)
-				msg|=CODE_COMPPATH;
+			try
+			{
+				if(r.getID()==IDsofEncampmentCreators[0] || r.getID()==IDsofEncampmentCreators[1])
+					continue;
+				RobotType thistype=rc.senseRobotInfo(r).type;
+				if(thistype==RobotType.GENERATOR && searching==0)
+					rc.broadcast((r.getID()*28+13466+channelBlock)%65535, CODE_COMPPATH);
+				if(thistype!=RobotType.SOLDIER)
+					continue;
+			}
+			catch (GameActionException e1)
+			{
+				e1.printStackTrace();
+			}
+			/*if(searching==0 && r.getID()==firstguyID)
+				msg|=CODE_COMPPATH;*/
 			try
 			{
 				rc.broadcast((r.getID()*28+13466+channelBlock)%65535,(msg));
@@ -173,7 +196,8 @@ public class HQ extends BaseRobot
 		}
 		if(mymines!=null)
 		{
-			if((miningRad/64+4)*(miningRad/64+4)*3/2-mymines.length<7+nearedgeweight(rallypt)) //mined area
+			//rc.setIndicatorString(1, (miningRad/64+4)*(miningRad/64+4)*3/2-mymines.length + " left, but I need: " + (7+nearedgeweight(rallypt)));
+			if((miningRad/64+4)*(miningRad/64+4)*3/2-mymines.length<=7+nearedgeweight(rallypt)) //mined area
 			{
 				if(miningRad==0) //if mined small area, mine a larger one
 				{	
@@ -190,6 +214,8 @@ public class HQ extends BaseRobot
 					{
 						goalIndex++; 
 						currgoal=readNextLoc(goalIndex);
+						if(currgoal!=null)
+							rc.setIndicatorString(0, currgoal.toString());
 						if(currgoal==null || currgoal.y==-1)
 						{	
 							//System.out.println("WHY!!!!!!!!");
@@ -229,13 +255,13 @@ public class HQ extends BaseRobot
 					}
 				}
 			}
-			else
-			{
-				rc.setIndicatorString(1,"Still mining");
-			}
+		//	else
+		//	{
+		//		rc.setIndicatorString(1,"Still mining");
+		//	}
 		}
 		msg|=(spread|miningRad); //put it all together
-		rc.setIndicatorString(0, rallypt.toString() + " " + ((currgoal!=null)?currgoal.toString():"null"));
+		rc.setIndicatorString(1, rallypt.toString() + " " + ((currgoal!=null)?currgoal.toString():"null"));
 		try
 		{
 			rc.broadcast(channelBlock-channelDelta, RobotTools.loctoint(rallypt));
@@ -261,10 +287,11 @@ public class HQ extends BaseRobot
 	{
 		if(rc.getMapWidth()-loc.x<5 || loc.x<5 || rc.getMapHeight()-loc.y<5 || loc.y<5)
 		{
+			//rc.setIndicatorString(0, miningRad+" ");
 			if(miningRad==0)
-				return 20;
+				return 22;
 			else if(miningRad==64)
-				return 30;
+				return 33;
 			else //WTF?
 				return 100;
 		}
@@ -288,10 +315,10 @@ public class HQ extends BaseRobot
 			}
 			if(possCommand!=0) //If it does: COMPROMISED or no directions posted yet 
 			{
-				if(possCommand+2000000000<0 && possCommand/500000000<0) //Both tests just in case, not really required to do both. Means null terminator
+				if((possCommand&TERMINATOR)>0)
 				{
 					endreading=true;
-					possCommand+=2000000000;
+					possCommand&=(TERMINATOR-1);
 				}
 				else
 					numread++;
@@ -312,11 +339,19 @@ public class HQ extends BaseRobot
 			searching=1;
 		if(result==DONEPATHING)
 			searching=2;
+		if((result&ENCEXISTS)>0)
+		{
+			//MapLocation loc=RobotTools.inttoloc(result&ENCEXISTS-1);
+			//myEncs.add(loc);
+			rc.broadcast(((result>>18)*28+13466+channelBlock)%65535,ACKNOLEDGED);
+			rc.broadcast((rc.getRobot().getID()*28+13466+channelBlock)%65535,0);
+			//System.out.println("Read you loud and clear. Over." + " Sending to: " + (result>>18));
+		}
 	}
 	
 	public void initRadio() throws GameActionException //initializes the radio
 	{
-		channelBlock=(int)((Math.random()*65535)+493671)%65535;
+		channelBlock=(int)((Math.random()*65535)+10846)%65535;
 		if(channelBlock==STARTCHANNEL)
 			channelBlock+=437;
 		myChannel=(rc.getRobot().getID()*28+13466+channelBlock)%65535;

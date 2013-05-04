@@ -29,7 +29,13 @@ public class AStar
 			}
 		}
 		for(MapLocation loc:mines)
+		{
+			if(loc.y/BUCKETSIZE>=MAPHEIGHT || loc.x/BUCKETSIZE>=MAPWIDTH)
+			{
+				continue;
+			}
 			map[loc.y/BUCKETSIZE][loc.x/BUCKETSIZE].mine+=2;
+		}
 	}
 	private AStarPoint[] getSquare(point center) //gets the area around a point. (like getSuccessors)
 	{

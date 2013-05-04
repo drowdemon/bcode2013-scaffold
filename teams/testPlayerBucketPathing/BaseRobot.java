@@ -4,6 +4,7 @@ import java.util.ArrayList;
 
 import battlecode.common.Direction;
 import battlecode.common.GameActionException;
+import battlecode.common.GameConstants;
 import battlecode.common.MapLocation;
 import battlecode.common.Robot;
 import battlecode.common.RobotController;
@@ -17,25 +18,37 @@ public abstract class BaseRobot
 	protected int myChannel;
 	protected int channelBlock;
 	protected int channelDelta;
-	protected static final int STARTCHANNEL=41975; //Important, but must be secret. For later, put in a second one or a bunch of them really to ensure that at least one will work. Used to give robots info of where the channel block and personal channels are
+	protected static final int STARTCHANNEL=23884; //Important, but must be secret. For later, put in a second one or a bunch of them really to ensure that at least one will work. Used to give robots info of where the channel block and personal channels are
 	private boolean searched=false;
 	protected MapLocation rallypt;
 	
+	//General
+	protected final static int TERMINATOR=131072; //for locs
 	//For Soldiers:
-	protected final static int CODE_COMPPATH=32;
-	protected final static int CHECK_NEWLOC=256;
+	protected final static int CREATE_MEDBAY=0; 
+	protected final static int CREATE_SHIELDS=64;
+	protected final static int CREATE_ARTILLARY=128;
+	protected final static int CREATE_GENERATOR=192;
+	protected final static int CREATE_SUPPLIER=256;
+	protected final static int CHECK_NEWLOC=512;
 	protected final static int RUSH=8; //Soldier states
 	protected final static int MINE=4;
 	protected final static int ATTACKANDMINE=12;
 	protected final static int DEFEND=16;
+	protected final static int CREATE_ENC=20;
 	//Several unassigned states: all of them are 0(?),4,8,12,16,20,24,28
 	protected final static int STATEFLAGCHECK=28; 
 	protected final static int SPREADFLAGCHECK=3; //possible: 0,1,2,3
 	protected final static int MININGFLAGCHECK=192; //Possible: 0,64,128,192. Translation:0->16,64->25,192->36,256,49
+	protected final static int CREATEENCFLAGCHECK=448;
 	//For HQ
 	protected final static int PATHING=42;
 	protected final static int DONEPATHING = 84;
-	
+	protected final static int ENCEXISTS=131072; //2^17
+	//For encampments
+	protected final static int CODE_COMPPATH=1;
+	protected final static int ACKNOLEDGED = 2;
+	//TODO revise messaging. BE SURE THAT ITS IMPOSSIBLE FOR ME TO OVERLAP WITH ME!!! ALSO, GET A HASH ON THE 4 most significant bits FOR ERROR CHECKING
 	public BaseRobot(RobotController myRC)
 	{
 		rc=myRC;
@@ -116,7 +129,7 @@ public abstract class BaseRobot
 				//Now i=waypoints.size()
 				try
 				{
-					rc.broadcast((channelBlock+channelDelta*(i-1))%65535,RobotTools.loctoint(waypoints.get(i))-2000000000); //2*10^9-null terminator
+					rc.broadcast((channelBlock+channelDelta*(i-1))%65535,RobotTools.loctoint(waypoints.get(i))|TERMINATOR);
 				}
 				catch (GameActionException e)
 				{
@@ -135,7 +148,44 @@ public abstract class BaseRobot
 			}
 		}
 	}
-	public abstract boolean run();
+	public boolean run() //simple existence check for encampments. Will be overridden by others.
+	{
+		int result=0;
+		try
+		{
+			result=rc.readBroadcast(myChannel);
+		}
+		catch (GameActionException e)
+		{
+			e.printStackTrace();
+		}
+		if(result==ACKNOLEDGED)
+		{
+			//System.out.println("Over and Out ");
+			return true;
+		}
+		else
+		{
+			if(rc.getTeamPower()>GameConstants.BROADCAST_SEND_COST);
+			{
+				try
+				{
+					rc.broadcast((rc.senseObjectAtLocation(myHQ).getID()*28+13466+channelBlock)%65535, ENCEXISTS|RobotTools.loctoint(rc.getLocation())|(rc.getRobot().getID()<<18));
+					//System.out.println("I HAVE ARRIVED! YOU ARE SAVED! DO YOU READ?" + result + " I am: " + rc.getRobot().getID());
+				}
+				catch (GameActionException e)
+				{
+					e.printStackTrace();
+				}
+			}
+			return false;
+		}
+	}
 	public abstract void run2();
-	public abstract void initRadio() throws GameActionException;
+	public void initRadio() throws GameActionException //Initializes my radio channels
+	{
+		channelBlock=rc.readBroadcast(STARTCHANNEL);
+		myChannel=(rc.getRobot().getID()*28+13466+channelBlock)%65535;
+		channelDelta=channelBlock%57*3;
+	}
 }

@@ -15,6 +15,12 @@ public class RobotPlayer
 		{
 			br=new Soldier(myRC);
 		}
+		else if(myRC.getType()==RobotType.MEDBAY)
+			br=new MedBay(myRC);
+		else if(myRC.getType()==RobotType.GENERATOR)
+			br=new Generator(myRC);
+		else if(myRC.getType()==RobotType.SUPPLIER)
+			br=new Supplier(myRC);
 		while(!br.run())
 		{
 			br.rc.yield();
